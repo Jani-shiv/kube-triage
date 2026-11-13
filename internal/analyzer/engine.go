@@ -6,16 +6,19 @@ import (
 	"strings"
 	"text/template"
 
+	"kube-triage/internal/analyzer/ai"
 	"kube-triage/internal/analyzer/rules"
 	"kube-triage/internal/collector"
 )
 
 type Engine struct {
-	provider   string
-	model      string
-	endpoint   string
-	ruleSet    *rules.RuleSet
-	matcher    *rules.Matcher
+	provider     string
+	model        string
+	endpoint     string
+	ruleSet      *rules.RuleSet
+	matcher      *rules.Matcher
+	aiManager    *ai.Manager
+	payloadBuilder *ai.PayloadBuilder
 }
 
 func NewEngine(provider, model, endpoint string) *Engine {
@@ -24,13 +27,17 @@ func NewEngine(provider, model, endpoint string) *Engine {
 		ruleSet = &rules.RuleSet{Rules: []rules.Rule{}}
 	}
 	matcher := rules.NewMatcher(ruleSet)
+	aiManager := ai.NewManager(provider, model, endpoint)
+	payloadBuilder := ai.NewPayloadBuilder(100, 50, 20)
 
 	return &Engine{
-		provider: provider,
-		model:    model,
-		endpoint: endpoint,
-		ruleSet:  ruleSet,
-		matcher:  matcher,
+		provider:       provider,
+		model:          model,
+		endpoint:       endpoint,
+		ruleSet:        ruleSet,
+		matcher:        matcher,
+		aiManager:      aiManager,
+		payloadBuilder: payloadBuilder,
 	}
 }
 
@@ -45,6 +52,8 @@ type AnalysisResult struct {
 	Prevention      []string
 	CollectedAt     string
 	MatchedRules    []string
+	AIEnhanced      bool
+	AIProvider      string
 }
 
 type RemediationStep struct {
@@ -105,7 +114,8 @@ func (e *Engine) Analyze(ctx context.Context, data *collector.DiagnosticData) (*
 		}
 	}
 
-	return result, nil
+	result.AIEnhanced = true
+	return e.analyzeWithAI(ctx, result, data)
 }
 
 func (e *Engine) buildResultFromMatches(base *AnalysisResult, matches []rules.MatchResult, data *collector.DiagnosticData) *AnalysisResult {
@@ -134,6 +144,91 @@ func (e *Engine) buildResultFromMatches(base *AnalysisResult, matches []rules.Ma
 		base.MatchedRules = append(base.MatchedRules, m.Rule.ID)
 	}
 
+	return base
+}
+
+func (e *Engine) analyzeWithAI(ctx context.Context, base *AnalysisResult, data *collector.DiagnosticData) (*AnalysisResult, error) {
+	payload, err := e.payloadBuilder.Build(data, base.MatchedRules)
+	if err != nil {
+		return base, nil
+	}
+
+	prompt := e.payloadBuilder.BuildPrompt(payload)
+
+	aiResponse, err := e.aiManager.Analyze(ctx, prompt)
+	if err != nil {
+		return base, nil
+	}
+
+	return e.parseAIResponse(base, aiResponse, e.aiManager.GetPrimaryProvider()), nil
+}
+
+func (e *Engine) parseAIResponse(base *AnalysisResult, aiResponse, provider string) *AnalysisResult {
+	base.AIEnhanced = true
+	base.AIProvider = provider
+
+	lines := strings.Split(aiResponse, "\n")
+	
+	var rootCauseLines []string
+	var remediationLines []string
+	var preventionLines []string
+	
+	currentSection := ""
+	
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		lower := strings.ToLower(trimmed)
+		
+		if strings.Contains(lower, "root cause") || strings.Contains(lower, "root_cause") {
+			currentSection = "rootcause"
+			continue
+		}
+		if strings.Contains(lower, "remediation") || strings.Contains(lower, "remediation:") {
+			currentSection = "remediation"
+			continue
+		}
+		if strings.Contains(lower, "prevention") || strings.Contains(lower, "prevention:") {
+			currentSection = "prevention"
+			continue
+		}
+		
+		if trimmed == "" {
+			continue
+		}
+		
+		switch currentSection {
+		case "rootcause":
+			rootCauseLines = append(rootCauseLines, trimmed)
+		case "remediation":
+			remediationLines = append(remediationLines, trimmed)
+		case "prevention":
+			preventionLines = append(preventionLines, trimmed)
+		}
+	}
+	
+	if len(rootCauseLines) > 0 {
+		base.RootCause = strings.Join(rootCauseLines, " ")
+	}
+	
+	if len(remediationLines) > 0 {
+		base.Remediation = []RemediationStep{}
+		for i, line := range remediationLines {
+			cmd := strings.TrimSpace(strings.TrimPrefix(line, fmt.Sprintf("%d.", i+1)))
+			cmd = strings.TrimSpace(strings.TrimPrefix(cmd, "-"))
+			if cmd != "" {
+				base.Remediation = append(base.Remediation, RemediationStep{
+					Description: fmt.Sprintf("AI-suggested remediation step %d", i+1),
+					Command:     cmd,
+					Type:        "command",
+				})
+			}
+		}
+	}
+	
+	if len(preventionLines) > 0 {
+		base.Prevention = preventionLines
+	}
+	
 	return base
 }
 
@@ -197,4 +292,11 @@ func (e *Engine) GetLoadedRules() []rules.Rule {
 		return []rules.Rule{}
 	}
 	return e.ruleSet.GetEnabledRules()
+}
+
+func (e *Engine) GetAIProviders() []string {
+	if e.aiManager == nil {
+		return []string{}
+	}
+	return e.aiManager.GetAvailableProviders()
 }
