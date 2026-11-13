@@ -36,7 +36,8 @@ rules:
     trigger:
       containerState:
         waiting:
-          reason: "CrashLoopBackOff"
+          reason:
+            - "CrashLoopBackOff"
     diagnosisTemplate: |
       Container {{ .ContainerName }} is in CrashLoopBackOff with {{ .RestartCount }} restarts.
       The container fails repeatedly on startup. Check previous logs for the actual error.
@@ -92,7 +93,8 @@ rules:
     severity: "HIGH"
     trigger:
       event:
-        reason: "FailedMount"
+        reason:
+          - "FailedMount"
     diagnosisTemplate: |
       Volume mount failed for pod {{ .PodName }}: {{ .EventMessage }}
       Common causes: PVC not bound, storage provisioner failure, node affinity mismatch.
@@ -120,7 +122,8 @@ rules:
     severity: "HIGH"
     trigger:
       event:
-        reason: "FailedScheduling"
+        reason:
+          - "FailedScheduling"
     diagnosisTemplate: |
       Scheduler cannot place pod {{ .PodName }}: {{ .EventMessage }}
       Common causes: insufficient resources, node selector/affinity mismatch, taints/tolerations.
@@ -149,7 +152,8 @@ rules:
     trigger:
       containerState:
         waiting:
-          reason: "CreateContainerConfigError"
+          reason:
+            - "CreateContainerConfigError"
     diagnosisTemplate: |
       Container configuration error for {{ .ContainerName }}: {{ .EventMessage }}
       Common causes: missing ConfigMap/Secret, invalid volume mount, malformed env vars.
@@ -174,7 +178,8 @@ rules:
     trigger:
       containerState:
         waiting:
-          reason: "RunContainerError"
+          reason:
+            - "RunContainerError"
     diagnosisTemplate: |
       Container runtime failed to start {{ .ContainerName }}: {{ .EventMessage }}
       Common causes: security context violations, missing binary, OOM during start.
@@ -254,7 +259,8 @@ rules:
     severity: "HIGH"
     trigger:
       event:
-        reason: "Forbidden"
+        reason:
+          - "Forbidden"
     diagnosisTemplate: |
       RBAC permission denied: {{ .EventMessage }}
       ServiceAccount {{ .ServiceAccount }} lacks required permissions.
@@ -309,7 +315,7 @@ rules:
         terminated:
           exitCode: 137
           reason: "OOMKilled"
-      isInitContainer: true
+        isInitContainer: true
     diagnosisTemplate: |
       Init container {{ .ContainerName }} OOMKilled (exit 137).
       Init containers share pod's memory limit but have no restart policy.

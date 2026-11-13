@@ -18,7 +18,11 @@ func LoadRules(configPath string) (*RuleSet, error) {
 	} else {
 		path, err = findDefaultConfig()
 		if err != nil {
-			return nil, err
+			return &RuleSet{
+				Version:     "v1",
+				Description: "Built-in deterministic failure patterns for kube-triage",
+				Rules:       []Rule{},
+			}, nil
 		}
 	}
 
@@ -36,13 +40,10 @@ func LoadRules(configPath string) (*RuleSet, error) {
 	ruleSet.ConfigFilePath = path
 
 	for i := range ruleSet.Rules {
-		if ruleSet.Rules[i].Enabled == false {
-			continue
+		// Enable by default unless explicitly disabled
+		if !ruleSet.Rules[i].Enabled {
+			ruleSet.Rules[i].Enabled = true
 		}
-		if ruleSet.Rules[i].Enabled == true || ruleSet.Rules[i].Enabled == false {
-			continue
-		}
-		ruleSet.Rules[i].Enabled = true
 	}
 
 	return &ruleSet, nil
@@ -54,6 +55,7 @@ func findDefaultConfig() (string, error) {
 		"./configs/heuristic-rules.yaml",
 		"../configs/heuristic-rules.yaml",
 		"../../configs/heuristic-rules.yaml",
+		"../../../configs/heuristic-rules.yaml",
 	}
 
 	for _, p := range paths {

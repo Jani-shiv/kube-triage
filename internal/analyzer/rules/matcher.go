@@ -66,6 +66,9 @@ func (m *Matcher) MatchEvent(event *corev1.Event, pod *corev1.Pod) []MatchResult
 				if ref.Kind == "ReplicaSet" {
 					ctx.DeploymentName = ref.Name
 				}
+				if ref.Kind == "Deployment" {
+					ctx.DeploymentName = ref.Name
+				}
 			}
 		}
 	}
@@ -281,6 +284,9 @@ func buildMatchContext(pod *corev1.Pod, container *corev1.Container, cs *corev1.
 
 	for _, ref := range pod.OwnerReferences {
 		if ref.Kind == "ReplicaSet" {
+			ctx.DeploymentName = ref.Name
+		}
+		if ref.Kind == "Deployment" {
 			ctx.DeploymentName = ref.Name
 		}
 	}

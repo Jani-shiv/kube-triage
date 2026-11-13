@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -109,6 +110,16 @@ func (c *Collector) Collect(ctx context.Context, resourceType, resourceName stri
 			if err == nil && len(pods) > 0 {
 				podData, err := c.podCollector.Collect(ctx, pods[0].Name)
 				if err == nil {
+					// Find the deployment name for remediation commands
+					deploy, err := c.workloadCollector.GetDeploymentForPod(ctx, pods[0].Name)
+					if err == nil && deploy != nil {
+						podData.Pod.OwnerReferences = append(podData.Pod.OwnerReferences, metav1.OwnerReference{
+							APIVersion: "apps/v1",
+							Kind:       "Deployment",
+							Name:       deploy.Name,
+							UID:        deploy.UID,
+						})
+					}
 					data.PodData = podData
 				}
 			}
