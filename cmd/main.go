@@ -9,6 +9,7 @@ import (
 
 	"kube-triage/internal/analyzer"
 	"kube-triage/internal/collector"
+	"kube-triage/internal/fixer"
 	"kube-triage/internal/renderer"
 )
 
@@ -18,6 +19,8 @@ var (
 	namespace     string
 	contextName   string
 	dryRun        bool
+	interactive   bool
+	autoApprove   bool
 	llmProvider   string
 	llmModel      string
 	llmEndpoint   string
@@ -62,6 +65,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "default", "Kubernetes namespace")
 	rootCmd.PersistentFlags().StringVar(&contextName, "context", "", "Kubernetes context to use")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "show remediation commands without executing")
+	rootCmd.PersistentFlags().BoolVar(&interactive, "interactive", false, "interactive remediation wizard (Bubble Tea TUI)")
+	rootCmd.PersistentFlags().BoolVar(&autoApprove, "auto-approve", false, "auto-approve all remediation commands (non-interactive)")
 	rootCmd.PersistentFlags().StringVar(&llmProvider, "llm-provider", "auto", "LLM provider: auto, nvidia, openai, anthropic, ollama, none")
 	rootCmd.PersistentFlags().StringVar(&llmModel, "llm-model", "", "LLM model name (provider-specific)")
 	rootCmd.PersistentFlags().StringVar(&llmEndpoint, "llm-endpoint", "", "Custom LLM endpoint URL")
@@ -72,6 +77,8 @@ func init() {
 	analyzeCmd.Flags().StringVar(&namespace, "namespace", "default", "Kubernetes namespace")
 	analyzeCmd.Flags().BoolVar(&previousLogs, "previous", false, "include previous container logs")
 	analyzeCmd.Flags().Int64Var(&tailLines, "tail", 100, "number of log lines to fetch")
+	analyzeCmd.Flags().BoolVar(&interactive, "interactive", false, "interactive remediation wizard")
+	analyzeCmd.Flags().BoolVar(&autoApprove, "auto-approve", false, "auto-approve all remediation commands")
 
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(versionCmd)
@@ -80,6 +87,8 @@ func init() {
 	viper.BindPFlag("namespace", rootCmd.PersistentFlags().Lookup("namespace"))
 	viper.BindPFlag("context", rootCmd.PersistentFlags().Lookup("context"))
 	viper.BindPFlag("dry-run", rootCmd.PersistentFlags().Lookup("dry-run"))
+	viper.BindPFlag("interactive", rootCmd.PersistentFlags().Lookup("interactive"))
+	viper.BindPFlag("auto-approve", rootCmd.PersistentFlags().Lookup("auto-approve"))
 	viper.BindPFlag("llm-provider", rootCmd.PersistentFlags().Lookup("llm-provider"))
 	viper.BindPFlag("llm-model", rootCmd.PersistentFlags().Lookup("llm-model"))
 	viper.BindPFlag("llm-endpoint", rootCmd.PersistentFlags().Lookup("llm-endpoint"))
@@ -117,6 +126,8 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	prev := viper.GetBool("previous")
 	tail := viper.GetInt64("tail")
 	dryRun := viper.GetBool("dry-run")
+	interactive := viper.GetBool("interactive")
+	autoApprove := viper.GetBool("auto-approve")
 	provider := viper.GetString("llm-provider")
 	model := viper.GetString("llm-model")
 	endpoint := viper.GetString("llm-endpoint")
@@ -141,7 +152,27 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	}
 
 	printer := renderer.NewPrinter(output)
-	return printer.Render(result, dryRun)
+	if err := printer.Render(result, dryRun); err != nil {
+		return err
+	}
+
+	if interactive {
+		if err := fixer.RunWizard(result); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if dryRun || autoApprove || len(result.Remediation) > 0 {
+		patcher := fixer.NewPatcher(dryRun, autoApprove)
+		results, err := patcher.ApplyRemediation(cmd.Context(), result)
+		if err != nil {
+			return err
+		}
+		patcher.PrintSummary(results)
+	}
+
+	return nil
 }
 
 func main() {
