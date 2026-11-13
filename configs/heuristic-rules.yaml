@@ -1,0 +1,385 @@
+version: "v1"
+description: "Built-in deterministic failure patterns for kube-triage"
+rules:
+  - id: "KT-001"
+    name: "OOMKilled Container Termination"
+    category: "resource"
+    severity: "CRITICAL"
+    trigger:
+      containerState:
+        terminated:
+          exitCode: 137
+          reason: "OOMKilled"
+    diagnosisTemplate: |
+      Container {{ .ContainerName }} exceeded its hard memory limit of {{ .LimitMemory }}.
+      Kubernetes sent SIGKILL (exit code 137) to terminate the process.
+    remediationSteps:
+      - type: "command"
+        description: "Increase memory limit in deployment spec"
+        snippet: 'kubectl patch deployment {{ .DeploymentName }} --type=''json'' -p=''[{"op": "replace", "path": "/spec/template/spec/containers/0/resources/limits/memory", "value": "1Gi"}]'''
+      - type: "command"
+        description: "Add memory request for QoS guarantees"
+        snippet: 'kubectl patch deployment {{ .DeploymentName }} --type=''json'' -p=''[{"op": "replace", "path": "/spec/template/spec/containers/0/resources/requests/memory", "value": "512Mi"}]'''
+    prevention:
+      - "Set memory requests ≈ limits for Guaranteed QoS class"
+      - "Configure Prometheus alerts: container_memory_usage_bytes > 0.8 * limit"
+      - "Profile application with pprof to identify memory leaks"
+      - "Implement graceful degradation under memory pressure"
+    references:
+      - "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+      - "https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/"
+
+  - id: "KT-002"
+    name: "CrashLoopBackOff"
+    category: "lifecycle"
+    severity: "HIGH"
+    trigger:
+      containerState:
+        waiting:
+          reason: "CrashLoopBackOff"
+    diagnosisTemplate: |
+      Container {{ .ContainerName }} is in CrashLoopBackOff with {{ .RestartCount }} restarts.
+      The container fails repeatedly on startup. Check previous logs for the actual error.
+    remediationSteps:
+      - type: "command"
+        description: "Check previous container logs for root cause"
+        snippet: "kubectl logs {{ .PodName }} -n {{ .Namespace }} -c {{ .ContainerName }} --previous"
+      - type: "command"
+        description: "Describe pod for events and configuration"
+        snippet: "kubectl describe pod {{ .PodName }} -n {{ .Namespace }}"
+    prevention:
+      - "Configure proper liveness and readiness probes with appropriate initialDelaySeconds"
+      - "Set startup probes for slow-starting applications"
+      - "Ensure application handles SIGTERM gracefully"
+      - "Use init containers for pre-start dependencies"
+    references:
+      - "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes"
+
+  - id: "KT-003"
+    name: "ImagePullBackOff / ErrImagePull"
+    category: "image"
+    severity: "HIGH"
+    trigger:
+      containerState:
+        waiting:
+          reason:
+            - "ImagePullBackOff"
+            - "ErrImagePull"
+    diagnosisTemplate: |
+      Kubernetes cannot pull the container image {{ .Image }}.
+      Common causes: wrong image name/tag, missing credentials, registry unreachable, rate limiting.
+    remediationSteps:
+      - type: "command"
+        description: "Verify image name and tag in pod spec"
+        snippet: "kubectl get pod {{ .PodName }} -n {{ .Namespace }} -o jsonpath='{.spec.containers[*].image}'"
+      - type: "command"
+        description: "Check image pull secrets"
+        snippet: "kubectl get pod {{ .PodName }} -n {{ .Namespace }} -o jsonpath='{.spec.imagePullSecrets}'"
+      - type: "command"
+        description: "Test image pull manually"
+        snippet: "docker pull {{ .Image }}"
+    prevention:
+      - "Use imagePullSecrets for private registries"
+      - "Pin image tags (avoid :latest) for reproducibility"
+      - "Configure registry credentials in CI/CD"
+      - "Monitor registry rate limits (Docker Hub: 100 pulls/6hr for anon)"
+    references:
+      - "https://kubernetes.io/docs/concepts/containers/images/"
+
+  - id: "KT-004"
+    name: "FailedMount Volume"
+    category: "storage"
+    severity: "HIGH"
+    trigger:
+      event:
+        reason: "FailedMount"
+    diagnosisTemplate: |
+      Volume mount failed for pod {{ .PodName }}: {{ .EventMessage }}
+      Common causes: PVC not bound, storage provisioner failure, node affinity mismatch.
+    remediationSteps:
+      - type: "command"
+        description: "Check PVC status and binding"
+        snippet: "kubectl get pvc -n {{ .Namespace }}"
+      - type: "command"
+        description: "Describe PVC for events"
+        snippet: "kubectl describe pvc {{ .PVCName }} -n {{ .Namespace }}"
+      - type: "command"
+        description: "Check storage provisioner logs"
+        snippet: "kubectl logs -n kube-system -l app=rook-ceph-operator --tail=50"
+    prevention:
+      - "Ensure StorageClass exists and provisioner is healthy"
+      - "Set volumeBindingMode: WaitForFirstConsumer for topology awareness"
+      - "Monitor PVC binding latency"
+      - "Configure CSI driver health checks"
+    references:
+      - "https://kubernetes.io/docs/concepts/storage/persistent-volumes/"
+
+  - id: "KT-005"
+    name: "FailedScheduling"
+    category: "scheduling"
+    severity: "HIGH"
+    trigger:
+      event:
+        reason: "FailedScheduling"
+    diagnosisTemplate: |
+      Scheduler cannot place pod {{ .PodName }}: {{ .EventMessage }}
+      Common causes: insufficient resources, node selector/affinity mismatch, taints/tolerations.
+    remediationSteps:
+      - type: "command"
+        description: "Check node resource availability"
+        snippet: "kubectl describe nodes | grep -A 5 'Allocated resources'"
+      - type: "command"
+        description: "Check node taints and pod tolerations"
+        snippet: "kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints"
+      - type: "command"
+        description: "Describe pod for scheduling constraints"
+        snippet: "kubectl describe pod {{ .PodName }} -n {{ .Namespace }}"
+    prevention:
+      - "Set resource requests/limits for proper scheduling"
+      - "Use node affinity/anti-affinity instead of nodeSelector"
+      - "Configure tolerations for dedicated nodes"
+      - "Monitor cluster capacity with cluster-autoscaler"
+    references:
+      - "https://kubernetes.io/docs/concepts/scheduling-eviction/"
+
+  - id: "KT-006"
+    name: "CreateContainerConfigError"
+    category: "configuration"
+    severity: "HIGH"
+    trigger:
+      containerState:
+        waiting:
+          reason: "CreateContainerConfigError"
+    diagnosisTemplate: |
+      Container configuration error for {{ .ContainerName }}: {{ .EventMessage }}
+      Common causes: missing ConfigMap/Secret, invalid volume mount, malformed env vars.
+    remediationSteps:
+      - type: "command"
+        description: "Describe pod for detailed error"
+        snippet: "kubectl describe pod {{ .PodName }} -n {{ .Namespace }}"
+      - type: "command"
+        description: "Check referenced ConfigMaps/Secrets exist"
+        snippet: "kubectl get configmap,secret -n {{ .Namespace }}"
+    prevention:
+      - "Validate ConfigMap/Secret references in CI/CD"
+      - "Use kubectl dry-run for manifests"
+      - "Implement admission webhooks for validation"
+    references:
+      - "https://kubernetes.io/docs/concepts/configmap/"
+
+  - id: "KT-007"
+    name: "RunContainerError"
+    category: "runtime"
+    severity: "HIGH"
+    trigger:
+      containerState:
+        waiting:
+          reason: "RunContainerError"
+    diagnosisTemplate: |
+      Container runtime failed to start {{ .ContainerName }}: {{ .EventMessage }}
+      Common causes: security context violations, missing binary, OOM during start.
+    remediationSteps:
+      - type: "command"
+        description: "Describe pod for runtime error details"
+        snippet: "kubectl describe pod {{ .PodName }} -n {{ .Namespace }}"
+      - type: "command"
+        description: "Check container security context"
+        snippet: "kubectl get pod {{ .PodName }} -n {{ .Namespace }} -o yaml | grep -A 20 securityContext"
+    prevention:
+      - "Test container locally with same security context"
+      - "Use allowPrivilegeEscalation: false unless required"
+      - "Validate capabilities drop/add lists"
+
+  - id: "KT-008"
+    name: "PersistentVolumeClaim Pending"
+    category: "storage"
+    severity: "HIGH"
+    trigger:
+      resource:
+        kind: "PersistentVolumeClaim"
+        status: "Pending"
+    diagnosisTemplate: |
+      PVC {{ .PVCName }} is stuck in Pending state.
+      StorageClass '{{ .StorageClassName }}' may be missing or dynamic provisioner is failing.
+    remediationSteps:
+      - type: "command"
+        description: "Check PVC and StorageClass"
+        snippet: "kubectl get pvc {{ .PVCName }} -n {{ .Namespace }} -o yaml"
+      - type: "command"
+        description: "Check StorageClass provisioner"
+        snippet: "kubectl get storageclass {{ .StorageClassName }} -o yaml"
+      - type: "command"
+        description: "Check provisioner pod logs"
+        snippet: "kubectl logs -n kube-system -l app=csi-provisioner --tail=50"
+    prevention:
+      - "Pre-provision PVs for static provisioning"
+      - "Ensure StorageClass provisioner is deployed and healthy"
+      - "Set reclaimPolicy: Retain for critical data"
+    references:
+      - "https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims"
+
+  - id: "KT-009"
+    name: "Node Memory/Disk/PID Pressure"
+    category: "node"
+    severity: "HIGH"
+    trigger:
+      nodeCondition:
+        type:
+          - "MemoryPressure"
+          - "DiskPressure"
+          - "PIDPressure"
+        status: "True"
+    diagnosisTemplate: |
+      Node {{ .NodeName }} is under {{ .ConditionType }}.
+      Kubelet will evict pods to reclaim resources.
+    remediationSteps:
+      - type: "command"
+        description: "Check node conditions and allocatable resources"
+        snippet: "kubectl describe node {{ .NodeName }}"
+      - type: "command"
+        description: "Check pods on node for eviction candidates"
+        snippet: "kubectl get pods --all-namespaces -o wide --field-selector spec.nodeName={{ .NodeName }}"
+      - type: "command"
+        description: "Check kubelet eviction thresholds"
+        snippet: "kubectl get node {{ .NodeName }} -o yaml | grep -A 10 evictionHard"
+    prevention:
+      - "Set resource requests/limits on all pods"
+      - "Configure cluster-autoscaler for capacity scaling"
+      - "Monitor node resource usage with Prometheus"
+      - "Set appropriate eviction thresholds in kubelet config"
+
+  - id: "KT-010"
+    name: "RBAC Permission Denied"
+    category: "security"
+    severity: "HIGH"
+    trigger:
+      event:
+        reason: "Forbidden"
+    diagnosisTemplate: |
+      RBAC permission denied: {{ .EventMessage }}
+      ServiceAccount {{ .ServiceAccount }} lacks required permissions.
+    remediationSteps:
+      - type: "command"
+        description: "Check ServiceAccount and bindings"
+        snippet: "kubectl get sa {{ .ServiceAccount }} -n {{ .Namespace }} -o yaml"
+      - type: "command"
+        description: "Check Role/ClusterRole bindings"
+        snippet: "kubectl get rolebinding,clusterrolebinding -n {{ .Namespace }} -o yaml | grep -A 5 {{ .ServiceAccount }}"
+      - type: "command"
+        description: "Test permissions with auth can-i"
+        snippet: "kubectl auth can-i <verb> <resource> --as=system:serviceaccount:{{ .Namespace }}:{{ .ServiceAccount }}"
+    prevention:
+      - "Use least-privilege RBAC roles"
+      - "Audit permissions regularly with kubectl auth can-i"
+      - "Use tools like rbac-tool or kubeaudit"
+    references:
+      - "https://kubernetes.io/docs/reference/access-authn-authz/rbac/"
+
+  - id: "KT-011"
+    name: "Liveness/Readiness Probe Failure"
+    category: "probes"
+    severity: "MEDIUM"
+    trigger:
+      event:
+        reason:
+          - "LivenessProbeFailed"
+          - "ReadinessProbeFailed"
+    diagnosisTemplate: |
+      {{ .ProbeType }} probe failed for container {{ .ContainerName }}: {{ .EventMessage }}
+      Application health endpoint returning non-success status.
+    remediationSteps:
+      - type: "command"
+        description: "Check probe configuration"
+        snippet: "kubectl get pod {{ .PodName }} -n {{ .Namespace }} -o yaml | grep -A 10 'livenessProbe\\|readinessProbe'"
+      - type: "command"
+        description: "Test health endpoint manually"
+        snippet: "kubectl exec {{ .PodName }} -n {{ .Namespace }} -c {{ .ContainerName }} -- curl -v localhost:8080/health"
+    prevention:
+      - "Set appropriate initialDelaySeconds and periodSeconds"
+      - "Implement separate liveness (crash) vs readiness (traffic) endpoints"
+      - "Use startup probes for slow-starting apps"
+      - "Make health checks lightweight"
+
+  - id: "KT-012"
+    name: "OOMKilled (Exit Code 137) - Init Container"
+    category: "resource"
+    severity: "CRITICAL"
+    trigger:
+      containerState:
+        terminated:
+          exitCode: 137
+          reason: "OOMKilled"
+      isInitContainer: true
+    diagnosisTemplate: |
+      Init container {{ .ContainerName }} OOMKilled (exit 137).
+      Init containers share pod's memory limit but have no restart policy.
+    remediationSteps:
+      - type: "command"
+        description: "Increase pod memory limit or init container limit"
+        snippet: 'kubectl patch deployment {{ .DeploymentName }} --type=''json'' -p=''[{"op": "replace", "path": "/spec/template/spec/initContainers/0/resources/limits/memory", "value": "512Mi"}]'''
+    prevention:
+      - "Set explicit memory limits on init containers"
+      - "Keep init containers lightweight"
+      - "Consider using sidecar pattern instead for long-running init tasks"
+
+  - id: "KT-013"
+    name: "Container Exited with Code 1"
+    category: "application"
+    severity: "MEDIUM"
+    trigger:
+      containerState:
+        terminated:
+          exitCode: 1
+    diagnosisTemplate: |
+      Container {{ .ContainerName }} exited with code 1 (general application error).
+      Check application logs for specific error details.
+    remediationSteps:
+      - type: "command"
+        description: "Check container logs"
+        snippet: "kubectl logs {{ .PodName }} -n {{ .Namespace }} -c {{ .ContainerName }} --previous"
+      - type: "command"
+        description: "Check application-specific logs"
+        snippet: "kubectl logs {{ .PodName }} -n {{ .Namespace }} -c {{ .ContainerName }} | tail -100"
+
+  - id: "KT-014"
+    name: "Container Exited with Code 139 (Segfault)"
+    category: "application"
+    severity: "HIGH"
+    trigger:
+      containerState:
+        terminated:
+          exitCode: 139
+    diagnosisTemplate: |
+      Container {{ .ContainerName }} segfaulted (exit 139 = SIGSEGV).
+      Possible causes: bug in application, memory corruption, incompatible binary/library.
+    remediationSteps:
+      - type: "command"
+        description: "Check container logs for stack trace"
+        snippet: "kubectl logs {{ .PodName }} -n {{ .Namespace }} -c {{ .ContainerName }} --previous"
+      - type: "command"
+        description: "Verify architecture compatibility"
+        snippet: "docker run --rm {{ .Image }} uname -m"
+    prevention:
+      - "Test container on target architecture (amd64/arm64)"
+      - "Enable core dumps for debugging"
+      - "Use distroless or minimal base images"
+
+  - id: "KT-015"
+    name: "Container Exited with Code 143 (SIGTERM)"
+    category: "lifecycle"
+    severity: "LOW"
+    trigger:
+      containerState:
+        terminated:
+          exitCode: 143
+    diagnosisTemplate: |
+      Container {{ .ContainerName }} received SIGTERM (exit 143) and terminated gracefully.
+      This is normal during pod deletion, scaling down, or node drain.
+    remediationSteps:
+      - type: "info"
+        description: "Normal termination - no action needed unless unexpected"
+        snippet: ""
+    prevention:
+      - "Implement graceful shutdown handling (catch SIGTERM)"
+      - "Set appropriate terminationGracePeriodSeconds"
+      - "Use preStop hooks for cleanup"

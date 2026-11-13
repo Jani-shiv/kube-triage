@@ -2,23 +2,35 @@ package analyzer
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"text/template"
 
-	corev1 "k8s.io/api/core/v1"
-
+	"kube-triage/internal/analyzer/rules"
 	"kube-triage/internal/collector"
 )
 
 type Engine struct {
-	provider string
-	model    string
-	endpoint string
+	provider   string
+	model      string
+	endpoint   string
+	ruleSet    *rules.RuleSet
+	matcher    *rules.Matcher
 }
 
 func NewEngine(provider, model, endpoint string) *Engine {
+	ruleSet, err := rules.LoadRules("")
+	if err != nil {
+		ruleSet = &rules.RuleSet{Rules: []rules.Rule{}}
+	}
+	matcher := rules.NewMatcher(ruleSet)
+
 	return &Engine{
 		provider: provider,
 		model:    model,
 		endpoint: endpoint,
+		ruleSet:  ruleSet,
+		matcher:  matcher,
 	}
 }
 
@@ -32,6 +44,7 @@ type AnalysisResult struct {
 	Remediation     []RemediationStep
 	Prevention      []string
 	CollectedAt     string
+	MatchedRules    []string
 }
 
 type RemediationStep struct {
@@ -46,136 +59,142 @@ func (e *Engine) Analyze(ctx context.Context, data *collector.DiagnosticData) (*
 		ResourceName: data.ResourceName,
 		Namespace:    data.Namespace,
 		CollectedAt:  data.CollectedAt,
+		Severity:     "LOW",
+		Summary:      "No obvious failure patterns detected",
+		RootCause:    "The resource appears to be in an unknown state. Manual investigation recommended.",
+		Remediation: []RemediationStep{
+			{
+				Description: "Get detailed resource description",
+				Command:     fmt.Sprintf("kubectl describe %s %s -n %s", data.ResourceType, data.ResourceName, data.Namespace),
+				Type:        "command",
+			},
+		},
+		Prevention: []string{
+			"Implement comprehensive monitoring and alerting",
+			"Regular cluster health checks",
+		},
 	}
 
 	if data.PodData != nil && data.PodData.Pod != nil {
-		pod := data.PodData.Pod
-
-		if len(pod.Status.ContainerStatuses) > 0 {
-			for _, cs := range pod.Status.ContainerStatuses {
-				if cs.State.Terminated != nil && cs.State.Terminated.ExitCode == 137 && cs.State.Terminated.Reason == "OOMKilled" {
-					result.Severity = "CRITICAL"
-					result.Summary = "Container OOMKilled - exceeded memory limit"
-					result.RootCause = "The container exceeded its hard memory limit. Kubernetes sent SIGKILL (exit code 137) to terminate the process."
-					result.Remediation = []RemediationStep{
-						{
-							Description: "Increase memory limit in deployment spec",
-							Command:     "kubectl patch deployment " + data.ResourceName + " --type='json' -p='[{\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/resources/limits/memory\", \"value\": \"1Gi\"}]'",
-							Type:        "command",
-						},
-					}
-					result.Prevention = []string{
-						"Set appropriate memory requests and limits based on profiling",
-						"Configure Prometheus alerts for memory usage approaching limits",
-						"Implement application-level memory monitoring",
-					}
-					return result, nil
-				}
-
-				if cs.State.Waiting != nil && cs.State.Waiting.Reason == "CrashLoopBackOff" {
-					result.Severity = "HIGH"
-					result.Summary = "Container in CrashLoopBackOff - restarting repeatedly"
-					result.RootCause = "The container is failing and restarting repeatedly. Check container logs for the actual error."
-					result.Remediation = []RemediationStep{
-						{
-							Description: "Check container logs for error details",
-							Command:     "kubectl logs " + data.ResourceName + " -n " + data.Namespace + " --previous",
-							Type:        "command",
-						},
-					}
-					result.Prevention = []string{
-						"Configure proper liveness and readiness probes",
-						"Set appropriate startup probes for slow-starting applications",
-					}
-					return result, nil
-				}
-
-				if cs.State.Waiting != nil && cs.State.Waiting.Reason == "ImagePullBackOff" {
-					result.Severity = "HIGH"
-					result.Summary = "Image pull failed - cannot retrieve container image"
-					result.RootCause = "Kubernetes cannot pull the container image. Check image name, registry credentials, and network connectivity."
-					result.Remediation = []RemediationStep{
-						{
-							Description: "Verify image name and tag",
-							Command:     "kubectl describe pod " + data.ResourceName + " -n " + data.Namespace,
-							Type:        "command",
-						},
-					}
-					result.Prevention = []string{
-						"Use imagePullSecrets for private registries",
-						"Verify image exists and is accessible",
-					}
-					return result, nil
-				}
-			}
-		}
-
-		for _, cond := range pod.Status.Conditions {
-			if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionFalse {
-				result.Severity = "MEDIUM"
-				result.Summary = "Pod not ready"
-				result.RootCause = "Pod readiness probe is failing or not configured."
-				result.Remediation = []RemediationStep{
-					{
-						Description: "Check pod events and readiness probe configuration",
-						Command:     "kubectl describe pod " + data.ResourceName + " -n " + data.Namespace,
-						Type:        "command",
-					},
-				}
-				result.Prevention = []string{
-					"Configure proper readiness probes",
-					"Ensure application handles startup gracefully",
-				}
-				return result, nil
-			}
+		podMatches := e.matcher.MatchPod(data.PodData.Pod)
+		if len(podMatches) > 0 {
+			return e.buildResultFromMatches(result, podMatches, data), nil
 		}
 	}
 
 	if data.EventsData != nil && len(data.EventsData.PodEvents) > 0 {
 		for _, event := range data.EventsData.PodEvents {
-			if event.Reason == "FailedMount" {
-				result.Severity = "HIGH"
-				result.Summary = "Volume mount failed"
-				result.RootCause = "Failed to mount volume: " + event.Message
-				result.Remediation = []RemediationStep{
-					{
-						Description: "Check PVC status and storage provisioner",
-						Command:     "kubectl get pvc -n " + data.Namespace,
-						Type:        "command",
-					},
-				}
-				return result, nil
-			}
-			if event.Reason == "FailedScheduling" {
-				result.Severity = "HIGH"
-				result.Summary = "Pod scheduling failed"
-				result.RootCause = "Scheduler cannot place pod: " + event.Message
-				result.Remediation = []RemediationStep{
-					{
-						Description: "Check node resources and taints",
-						Command:     "kubectl describe nodes",
-						Type:        "command",
-					},
-				}
-				return result, nil
+			eventMatches := e.matcher.MatchEvent(&event, data.PodData.Pod)
+			if len(eventMatches) > 0 {
+				return e.buildResultFromMatches(result, eventMatches, data), nil
 			}
 		}
 	}
 
-	result.Severity = "LOW"
-	result.Summary = "No obvious failure patterns detected"
-	result.RootCause = "The resource appears to be in an unknown state. Manual investigation recommended."
-	result.Remediation = []RemediationStep{
-		{
-			Description: "Get detailed resource description",
-			Command:     "kubectl describe " + data.ResourceType + " " + data.ResourceName + " -n " + data.Namespace,
-			Type:        "command",
-		},
+	if data.StorageData != nil {
+		pvcMatches := e.matcher.MatchPVC(data.StorageData, data.Namespace, data.ResourceName)
+		if len(pvcMatches) > 0 {
+			return e.buildResultFromMatches(result, pvcMatches, data), nil
+		}
 	}
-	result.Prevention = []string{
-		"Implement comprehensive monitoring and alerting",
-		"Regular cluster health checks",
+
+	if data.NodeData != nil {
+		nodeMatches := e.matcher.MatchNode(data.NodeData, data.ResourceName)
+		if len(nodeMatches) > 0 {
+			return e.buildResultFromMatches(result, nodeMatches, data), nil
+		}
 	}
 
 	return result, nil
+}
+
+func (e *Engine) buildResultFromMatches(base *AnalysisResult, matches []rules.MatchResult, data *collector.DiagnosticData) *AnalysisResult {
+	if len(matches) == 0 {
+		return base
+	}
+
+	bestMatch := matches[0]
+	for _, m := range matches {
+		if m.Score > bestMatch.Score {
+			bestMatch = m
+		}
+	}
+
+	rule := bestMatch.Rule
+	ctx := bestMatch.Context
+
+	base.Severity = rule.Severity
+	base.Summary = rule.Name
+	base.RootCause = e.renderTemplate(rule.DiagnosisTemplate, ctx)
+	base.Remediation = e.renderRemediationSteps(rule.RemediationSteps, ctx)
+	base.Prevention = rule.Prevention
+	base.MatchedRules = []string{rule.ID}
+
+	for _, m := range matches[1:] {
+		base.MatchedRules = append(base.MatchedRules, m.Rule.ID)
+	}
+
+	return base
+}
+
+func (e *Engine) renderTemplate(tmpl string, ctx rules.MatchContext) string {
+	t, err := template.New("diag").Parse(tmpl)
+	if err != nil {
+		return tmpl
+	}
+
+	var buf strings.Builder
+	data := map[string]interface{}{
+		"PodName":           ctx.PodName,
+		"Namespace":         ctx.Namespace,
+		"ContainerName":     ctx.ContainerName,
+		"DeploymentName":    ctx.DeploymentName,
+		"RestartCount":      ctx.RestartCount,
+		"LimitMemory":       ctx.LimitMemory,
+		"Image":             ctx.Image,
+		"PVCName":           ctx.PVCName,
+		"StorageClassName":  ctx.StorageClassName,
+		"NodeName":          ctx.NodeName,
+		"ConditionType":     ctx.ConditionType,
+		"ServiceAccount":    ctx.ServiceAccount,
+		"ProbeType":         ctx.ProbeType,
+		"EventMessage":      ctx.EventMessage,
+		"IsInitContainer":   ctx.IsInitContainer,
+	}
+
+	if err := t.Execute(&buf, data); err != nil {
+		return tmpl
+	}
+
+	return buf.String()
+}
+
+func (e *Engine) renderRemediationSteps(steps []rules.RemediationStep, ctx rules.MatchContext) []RemediationStep {
+	var result []RemediationStep
+	for _, step := range steps {
+		cmd := e.renderTemplate(step.Snippet, ctx)
+		result = append(result, RemediationStep{
+			Description: step.Description,
+			Command:     cmd,
+			Type:        step.Type,
+		})
+	}
+	return result
+}
+
+func (e *Engine) ReloadRules() error {
+	ruleSet, err := rules.LoadRules("")
+	if err != nil {
+		return err
+	}
+	e.ruleSet = ruleSet
+	e.matcher = rules.NewMatcher(ruleSet)
+	return nil
+}
+
+func (e *Engine) GetLoadedRules() []rules.Rule {
+	if e.ruleSet == nil {
+		return []rules.Rule{}
+	}
+	return e.ruleSet.GetEnabledRules()
 }
