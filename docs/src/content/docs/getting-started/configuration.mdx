@@ -1,0 +1,182 @@
+---
+title: "Configuration"
+description: "Configure kube-triage via config file, environment variables, and CLI flags"
+---
+
+# Configuration
+
+kube-triage can be configured via config file, environment variables, and CLI flags with clear precedence.
+
+## Configuration Precedence
+
+Settings are applied in this order (highest to lowest priority):
+
+1. CLI flags (`--flag`)
+2. Environment variables (`KUBE_TRIAGE_*`)
+3. Config file (`~/.kube-triage.yaml`)
+4. Defaults
+
+## Config File (`~/.kube-triage.yaml`)
+
+Create a config file at `~/.kube-triage.yaml` or specify with `--config`:
+
+```yaml
+kubeconfig: ~/.kube/config
+context: docker-desktop
+namespace: default
+llm-provider: auto
+llm-model: nemotron-3-ultra
+llm-endpoint: ""
+dry-run: false
+previous: false
+tail: 100
+output: terminal
+```
+
+### Config File Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `kubeconfig` | string | `~/.kube/config` | Path to kubeconfig file |
+| `context` | string | `""` | Kubernetes context to use |
+| `namespace` | string | `default` | Default namespace |
+| `llm-provider` | string | `auto` | AI provider: auto, nvidia, ollama, openai, anthropic, none |
+| `llm-model` | string | `nemotron-3-ultra` | Model name (provider-specific) |
+| `llm-endpoint` | string | `""` | Custom LLM endpoint URL |
+| `dry-run` | bool | `false` | Show commands without executing |
+| `previous` | bool | `false` | Include previous container logs |
+| `tail` | int | `100` | Number of log lines to fetch |
+| `output` | string | `terminal` | Output format: terminal, json, yaml |
+
+## Environment Variables
+
+All config options can be set via environment variables with `KUBE_TRIAGE_` prefix:
+
+```bash
+# Core
+export KUBE_TRIAGE_KUBECONFIG=~/.kube/config
+export KUBE_TRIAGE_CONTEXT=docker-desktop
+export KUBE_TRIAGE_NAMESPACE=production
+export KUBE_TRIAGE_LLM_PROVIDER=auto
+export KUBE_TRIAGE_LLM_MODEL=nemotron-3-ultra
+export KUBE_TRIAGE_LLM_ENDPOINT=""
+export KUBE_TRIAGE_DRY_RUN=false
+export KUBE_TRIAGE_PREVIOUS=false
+export KUBE_TRIAGE_TAIL=100
+export KUBE_TRIAGE_OUTPUT=terminal
+
+# AI Providers
+export NVIDIA_API_KEY=nvapi-xxxxxxxxxxxx
+export NVIDIA_MODEL=nvidia/nemotron-3-ultra
+
+export OLLAMA_HOST=http://localhost:11434
+export OLLAMA_MODEL=nemotron3-ultra
+
+export OPENAI_API_KEY=sk-xxxxxxxxxxxx
+export OPENAI_MODEL=gpt-4o
+
+export ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
+export ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+```
+
+## CLI Flags
+
+All options available as CLI flags:
+
+```bash
+kube-triage analyze pod failing-pod -n production \
+  --kubeconfig ~/.kube/config \
+  --context docker-desktop \
+  --namespace production \
+  --llm-provider auto \
+  --llm-model nemotron-3-ultra \
+  --llm-endpoint https://api.example.com \
+  --dry-run \
+  --previous \
+  --tail 100 \
+  --output json
+```
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--kubeconfig` | - | string | - | Path to kubeconfig file |
+| `--context` | - | string | - | Kubernetes context to use |
+| `--namespace`, `-n` | - | string | `default` | Kubernetes namespace |
+| `--llm-provider` | - | string | `auto` | AI provider: auto, nvidia, ollama, openai, anthropic, none |
+| `--llm-model` | - | string | - | Model name (provider-specific) |
+| `--llm-endpoint` | - | string | - | Custom LLM endpoint URL |
+| `--dry-run` | - | bool | `false` | Show commands without executing |
+| `--previous` | - | bool | `false` | Include previous container logs |
+| `--tail` | - | int | `100` | Number of log lines to fetch |
+| `--output` | - | string | `terminal` | Output format: terminal, json, yaml |
+| `--auto-approve` | - | bool | `false` | Auto-approve all remediation commands |
+| `--interactive` | - | bool | `false` | Interactive remediation wizard |
+
+## AI Provider Configuration
+
+### NVIDIA Nemotron (Primary)
+```bash
+export NVIDIA_API_KEY=nvapi-xxxxxxxxxxxx
+export NVIDIA_MODEL=nvidia/nemotron-3-ultra
+# Free tier at https://build.nvidia.com
+```
+
+### Ollama (Local)
+```bash
+export OLLAMA_HOST=http://localhost:11434
+export OLLAMA_MODEL=nemotron3-ultra
+# Verify: ollama list
+```
+
+### OpenAI
+```bash
+export OPENAI_API_KEY=sk-xxxxxxxxxxxx
+export OPENAI_MODEL=gpt-4o
+```
+
+### Anthropic
+```bash
+export ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
+export ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+```
+
+## Configuration Examples
+
+### Production CI/CD Pipeline
+```yaml
+# .github/workflows/diagnose.yml
+env:
+  KUBE_TRIAGE_KUBECONFIG: ${{ secrets.KUBECONFIG }}
+  KUBE_TRIAGE_NAMESPACE: production
+  KUBE_TRIAGE_LLM_PROVIDER: nvidia
+  KUBE_TRIAGE_LLM_MODEL: nvidia/nemotron-3-ultra
+  NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+  KUBE_TRIAGE_OUTPUT: json
+```
+
+### Local Development with Ollama
+```bash
+# .env.local
+KUBE_TRIAGE_LLM_PROVIDER=ollama
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=nemotron3-ultra
+KUBE_TRIAGE_NAMESPACE=development
+```
+
+### Production with NVIDIA Nemotron
+```bash
+export KUBE_TRIAGE_NAMESPACE=production
+export KUBE_TRIAGE_LLM_PROVIDER=nvidia
+export NVIDIA_API_KEY=nvapi-xxxxxxxxxxxx
+export NVIDIA_MODEL=nvidia/nemotron-3-ultra
+export KUBE_TRIAGE_OUTPUT=terminal
+```
+
+## Validate Configuration
+```bash
+# Check config file syntax
+kube-triage version
+
+# Test cluster connection
+kube-triage analyze pod nonexistent -n default --dry-run
+```

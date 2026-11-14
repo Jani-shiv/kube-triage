@@ -1,0 +1,202 @@
+---
+title: "AI Provider Overview"
+description: "Understanding kube-triage's AI provider architecture and fallback chain"
+---
+
+# AI Provider Architecture
+
+kube-triage uses a hybrid analysis engine: deterministic rules first (instant, no API calls), then AI fallback for complex multi-system failures.
+
+## Hybrid Engine Flow
+
+```
+User: kube-triage analyze pod failing-app -n prod
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ Collector: Pod + Events + Workload + Node │
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ Deterministic Rules (KT-001 to KT-015)    │
+│   ├─ Match? → Return result (instant)     │
+│   └─ No match? → Build AI Payload         │
+└──────────────────────────────────────────┘
+         │
+         ▼ (if no deterministic match)
+┌──────────────────────────────────────────┐
+│ AI Provider Chain (auto-detected)         │
+│   1. NVIDIA Nemotron (NVIDIA_API_KEY)     │
+│   2. Ollama Local (OLLAMA_HOST)           │
+│   3. OpenAI (OPENAI_API_KEY)              │
+│   4. Anthropic (ANTHROPIC_API_KEY)        │
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ Render: Terminal UI / JSON / YAML         │
+└──────────────────────────────────────────┘
+```
+
+## Provider Priority & Auto-Detection
+
+The `--llm-provider` flag accepts: `auto` (default), `nvidia`, `ollama`, `openai`, `anthropic`, `none`.
+
+### Auto Mode Priority Chain
+
+1. **NVIDIA Nemotron** — If `NVIDIA_API_KEY` is set (primary, free tier at [build.nvidia.com](https://build.nvidia.com))
+2. **Ollama Local** — If `OLLAMA_HOST` is set (default: `http://localhost:11434`)
+3. **OpenAI** — If `OPENAI_API_KEY` is set
+4. **Anthropic** — If `ANTHROPIC_API_KEY` is set
+5. **Graceful Fallback** — Returns deterministic default if all fail
+
+## Supported Providers
+
+### NVIDIA Nemotron (Primary)
+
+Primary provider. Free tier at [build.nvidia.com](https://build.nvidia.com)
+
+- Model: `nvidia/nemotron-3-ultra`
+- Free tier available
+- Requires `NVIDIA_API_KEY`
+- Endpoint: `https://integrate.api.nvidia.com/v1`
+
+### Ollama (Local)
+
+Run models locally, no API key needed
+
+- Models: `nemotron3-ultra`, `llama3`, `codellama`
+- 100% local, no internet required
+- Requires `OLLAMA_HOST` (default: `http://localhost:11434`)
+- Health check: `ollama list`
+
+### OpenAI
+
+GPT-4o and compatible models
+
+- Models: `gpt-4o`, `gpt-4-turbo`, `gpt-3.5-turbo`
+- Requires `OPENAI_API_KEY`
+- Endpoint: `https://api.openai.com/v1`
+- Custom endpoint supported via `--llm-endpoint`
+
+### Anthropic
+
+Claude 3.5 Sonnet integration
+
+- Model: `claude-3-5-sonnet-20241022`
+- Requires `ANTHROPIC_API_KEY`
+- Endpoint: `https://api.anthropic.com/v1`
+- Uses Messages API with system prompt
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Core
+export KUBE_TRIAGE_KUBECONFIG=~/.kube/config
+export KUBE_TRIAGE_CONTEXT=docker-desktop
+export KUBE_TRIAGE_NAMESPACE=production
+export KUBE_TRIAGE_LLM_PROVIDER=auto
+export KUBE_TRIAGE_LLM_MODEL=nemotron-3-ultra
+export KUBE_TRIAGE_LLM_ENDPOINT=""
+export KUBE_TRIAGE_DRY_RUN=false
+export KUBE_TRIAGE_PREVIOUS=false
+export KUBE_TRIAGE_TAIL=100
+export KUBE_TRIAGE_OUTPUT=terminal
+
+# AI Providers
+export NVIDIA_API_KEY=nvapi-xxxxxxxxxxxx
+export NVIDIA_MODEL=nvidia/nemotron-3-ultra
+
+export OLLAMA_HOST=http://localhost:11434
+export OLLAMA_MODEL=nemotron3-ultra
+
+export OPENAI_API_KEY=sk-xxxxxxxxxxxx
+export OPENAI_MODEL=gpt-4o
+
+export ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
+export ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+```
+
+### CLI Flags
+
+```bash
+# Use specific provider
+kube-triage analyze pod failing-pod -n prod --llm-provider nvidia
+kube-triage analyze pod failing-pod -n prod --llm-provider ollama
+kube-triage analyze pod failing-pod -n prod --llm-provider none
+
+# Custom model
+kube-triage analyze pod failing-pod -n prod --llm-model gpt-4o
+
+# Custom endpoint (for Ollama/OpenAI compatible)
+kube-triage analyze pod failing-pod -n prod --llm-endpoint http://localhost:11434
+```
+
+### Config File (`~/.kube-triage.yaml`)
+
+```yaml
+kubeconfig: ~/.kube/config
+context: docker-desktop
+namespace: default
+llm-provider: auto
+llm-model: nemotron-3-ultra
+llm-endpoint: ""
+dry-run: false
+previous: false
+tail: 100
+output: terminal
+```
+
+## Disabling AI
+
+Use `--llm-provider none` to run with deterministic rules only (no API calls, no costs, no network dependency):
+
+```bash
+kube-triage analyze pod failing-pod -n prod --llm-provider none
+```
+
+## AI Payload Structure
+
+When AI is invoked, kube-triage builds a structured payload containing:
+
+- Resource metadata (type, name, namespace)
+- Pod spec, status, container statuses, logs (last 100 lines)
+- Events (warning events for pod, namespace, related resources)
+- Workload info (deployment, replicaset, replicas, conditions)
+- Node info (conditions, capacity, allocatable, taints)
+- Storage info (PVC/PV status, capacity, storage class)
+- Network info (services, endpoints, ingress, network policies)
+- Matched deterministic rules
+
+The payload is compressed and sent as a structured prompt to the AI provider.
+
+## Troubleshooting
+
+### NVIDIA API Key Issues
+
+- Get free API key at [build.nvidia.com](https://build.nvidia.com)
+- Check quota and rate limits
+- Verify key format: starts with `nvapi-`
+
+### Ollama Connection Issues
+
+```bash
+# Check Ollama is running
+curl http://localhost:11434/api/tags
+
+# List available models
+ollama list
+
+# Pull required model
+ollama pull nemotron3-ultra
+```
+
+### Rate Limiting
+
+- NVIDIA free tier: ~10-20 req/min before 429
+- OpenAI: Depends on your plan
+- Anthropic: Depends on your plan
+- Ollama: No rate limits (local)

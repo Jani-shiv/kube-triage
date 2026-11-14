@@ -1,0 +1,84 @@
+---
+import Layout from './Layout.astro';
+import Sidebar from '../components/SidebarSimple.astro';
+import MobileMenu from '../components/MobileMenu.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  currentPath?: string;
+  editUrl?: string;
+  showSidebar?: boolean;
+}
+
+const { title, description, currentPath, editUrl, showSidebar = true } = Astro.props;
+const isHome = currentPath === '/' || currentPath === '';
+---
+
+<Layout title={title} description={description}>
+  <div class="flex min-h-screen">
+    <MobileMenu />
+    
+    {showSidebar && (
+      <aside class="hidden lg:block fixed inset-y-0 left-0 z-40 w-72 bg-[var(--color-bg-primary)] border-r border-[var(--color-border)] overflow-y-auto pt-16 transition-transform duration-300">
+        <Sidebar currentPath={currentPath} />
+      </aside>
+    )}
+
+    <div class="lg:pl-72 flex flex-1 min-w-0">
+      <header class="sticky top-0 z-30 bg-[var(--color-bg-primary)]/95 backdrop-blur-sm border-b border-[var(--color-border)] px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <MobileMenu />
+          <h1 class="text-xl font-semibold text-[var(--color-text-primary)] truncate">{title}</h1>
+        </div>
+        <div class="flex items-center gap-4">
+          {editUrl && (
+            <a href={editUrl} target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1V5a1 1 0 011-1h3a1 1 0 011 1v1a1 1 0 01-1 1H7a1 1 0 01-1-1V5a1 1 0 011-1h3a1 1 0 011 1v1a1 1 0 01-1 1H7z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5z" />
+              </svg>
+              Edit this page
+            </a>
+          )}
+          <ThemeToggle />
+        </div>
+      </header>
+
+      <main class="flex-1 max-w-5xl mx-auto w-full px-6 py-8 lg:px-12">
+        <slot />
+      </main>
+
+      <footer class="border-t border-[var(--color-border)] px-6 py-6 lg:px-12 mt-auto">
+        <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-[var(--color-text-muted)]">
+          <p>© 2024 kube-triage. Open source under MIT License.</p>
+          <div class="flex items-center gap-4">
+            <a href="https://github.com/Jani-shiv/kube-triage" target="_blank" rel="noopener noreferrer" class="hover:text-[var(--color-text-primary)] transition-colors">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd" />
+              </svg>
+            </a>
+            <a href="https://github.com/Jani-shiv/kube-triage/discussions" target="_blank" rel="noopener noreferrer" class="hover:text-[var(--color-text-primary)] transition-colors">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </Layout>
+---
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('sidebar-toggle');
+    const sidebar = document.querySelector('aside');
+    if (toggle && sidebar) {
+      toggle.addEventListener('click', () => {
+        sidebar.classList.toggle('-translate-x-full');
+      });
+    }
+  });
+</script>

@@ -1,0 +1,149 @@
+---
+title: "Quick Start"
+description: "Get started with kube-triage in 5 minutes"
+---
+
+import { Callout } from '@/components/Callout.astro';
+
+# Quick Start Guide
+
+Get from zero to diagnosing your first failing pod in under 5 minutes.
+
+## Prerequisites
+
+- Kubernetes cluster (Docker Desktop, kind, minikube, EKS/GKE/AKS)
+- `kubectl` configured with cluster access
+- Go 1.22+ (for building from source)
+
+<Callout type="warning" title="Docker Desktop Users">
+Settings → Kubernetes → ☑️ Enable Kubernetes → Apply & Restart
+</Callout>
+
+## Step 1: Install kube-triage
+
+### Option A: Go Install (Recommended)
+```bash
+go install github.com/Jani-shiv/kube-triage/cmd@latest
+```
+Requires Go 1.22+. The binary will be installed to `$(go env GOPATH)/bin`.
+
+### Option B: Download Binary
+Download the latest release from [GitHub Releases](https://github.com/Jani-shiv/kube-triage/releases).
+
+### Option C: Build from Source
+```bash
+git clone https://github.com/Jani-shiv/kube-triage.git
+cd kube-triage
+go build -o kube-triage ./cmd
+```
+
+### Verify Installation
+```bash
+kube-triage version
+# kube-triage v1.0.0
+# AI Kubernetes Diagnostic Engine
+kube-triage --help
+```
+
+## Step 2: Verify Cluster Access
+
+```bash
+kubectl get nodes
+
+# Expected output:
+# NAME                    STATUS   ROLES           AGE   VERSION
+# desktop-control-plane   Ready    control-plane   2h    v1.36.1
+```
+
+<Callout type="warning" title="Docker Desktop Users">
+Settings → Kubernetes → ☑️ Enable Kubernetes → Apply & Restart
+</Callout>
+
+## Step 3: Run Your First Diagnosis
+
+### Create a Test Pod (OOMKilled)
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-oom
+  namespace: default
+spec:
+  restartPolicy: Never
+  containers:
+  - name: oom
+    image: golang:1.22-alpine
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        cat > /oom.go << 'EOF'
+        package main
+        import ("runtime"; "time")
+        func main() {
+          var data []byte
+          for { data = append(data, make([]byte, 1024*1024)...); runtime.GC(); time.Sleep(100*time.Millisecond) }
+        }
+        EOF
+        go run /oom.go
+    resources:
+      limits:
+        memory: "10Mi"
+      requests:
+        memory: "5Mi"
+EOF
+```
+
+### Wait for OOMKilled
+```bash
+sleep 15
+kubectl get pod test-oom
+# NAME      READY   STATUS      RESTARTS   AGE
+# test-oom  0/1     OOMKilled   0          15s
+```
+
+### Run kube-triage Analysis
+```bash
+kube-triage analyze pod test-oom -n default
+```
+
+### Expected Output
+```
+╔══════════════════════════════════════════════════════════════════╗
+║  kube-triage v1.0.0 — AI Kubernetes Diagnostic Engine           ║
+╚══════════════════════════════════════════════════════════════════╝
+
+ 🎯 Target Resource : pod/test-oom (Namespace: default)
+ 🔍 Failure State   : OOMKilled Container Termination
+ ⚠️  Severity Level : ████████████ CRITICAL ████████████
+
+ 🧠 Root Cause Analysis:
+   Container oom exceeded its hard memory limit of 10Mi.
+   Kubernetes sent SIGKILL (exit code 137) to terminate the process.
+
+ 🛠️ Recommended Remediation:
+   1. Increase memory limit in deployment spec
+      $ kubectl patch deployment  --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/resources/limits/memory", "value": "1Gi"}]'
+   2. Add memory request for QoS guarantees
+      $ kubectl patch deployment  --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/resources/requests/memory", "value": "512Mi"}]'
+
+ 🛡️ Prevention & Best Practices:
+   • Set memory requests ≈ limits for Guaranteed QoS class
+   • Configure Prometheus alerts: container_memory_usage_bytes > 0.8 * limit
+   • Profile application with pprof to identify memory leaks
+   • Implement graceful degradation under memory pressure
+```
+
+## Next Steps
+
+- [Analyzing Pods](/guides/analyzing-pods) - Learn to analyze different pod failure patterns
+- [Analyzing Deployments](/guides/analyzing-deployments) - Debug deployment issues with auto-fix
+- [JSON Output for CI/CD](/guides/json-output) - Integrate with CI/CD pipelines using JSON output
+- [Rule Reference](/reference/rules) - Explore all 15 deterministic rules (KT-001 to KT-015)
+- [AI Providers](/ai/overview) - Configure AI providers for complex failures
+
+<Callout type="info" title="Clean Up">
+```bash
+kubectl delete pod test-oom -n default
+```
+</Callout>

@@ -1,0 +1,101 @@
+---
+title: "Installation"
+description: "Install kube-triage via binary, package manager, or from source"
+---
+
+# Installation
+
+Multiple ways to install kube-triage depending on your workflow and environment.
+
+## Go Install (Recommended)
+
+The easiest way to get the latest version:
+
+```bash
+go install github.com/Jani-shiv/kube-triage/cmd@latest
+```
+
+Requires Go 1.22+. The binary will be installed to `$(go env GOPATH)/bin`.
+
+## Download Pre-built Binary
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/Jani-shiv/kube-triage/releases).
+
+| Platform | Architecture | File |
+|----------|--------------|------|
+| Linux | amd64 | `kube-triage_1.0.0_linux_amd64.tar.gz` |
+| Linux | arm64 | `kube-triage_1.0.0_linux_arm64.tar.gz` |
+| macOS | amd64 (Intel) | `kube-triage_1.0.0_darwin_amd64.tar.gz` |
+| macOS | arm64 (Apple Silicon) | `kube-triage_1.0.0_darwin_arm64.tar.gz` |
+| Windows | amd64 | `kube-triage_1.0.0_windows_amd64.zip` |
+
+### Install on Linux/macOS
+```bash
+curl -fsSL https://github.com/Jani-shiv/kube-triage/releases/download/v1.0.0/kube-triage_1.0.0_linux_amd64.tar.gz | tar -xz
+sudo mv kube-triage /usr/local/bin/
+kube-triage version
+```
+
+### Install on Windows (PowerShell)
+```powershell
+Invoke-WebRequest -Uri "https://github.com/Jani-shiv/kube-triage/releases/download/v1.0.0/kube-triage_1.0.0_windows_amd64.zip" -OutFile "kube-triage.zip"
+Expand-Archive -Path "kube-triage.zip" -DestinationPath "kube-triage-extract"
+$installDir = "$env:USERPROFILE\.local\bin"
+if (-not (Test-Path $installDir)) { New-Item -ItemType Directory -Path $installDir -Force }
+Move-Item "kube-triage-extract\kube-triage.exe" "$installDir\kube-triage.exe" -Force
+$currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($currentPath -notlike "*$installDir*") {
+    [Environment]::SetEnvironmentVariable("Path", $currentPath + ";" + $installDir, "User")
+}
+kube-triage version
+```
+
+## Homebrew (macOS/Linux)
+```bash
+brew tap Jani-shiv/tap
+brew install kube-triage
+```
+
+## Build from Source
+```bash
+git clone https://github.com/Jani-shiv/kube-triage.git
+cd kube-triage
+go build -o kube-triage ./cmd
+sudo mv kube-triage /usr/local/bin/
+```
+
+## Verify Installation
+```bash
+kube-triage version
+# kube-triage v1.0.0
+# AI Kubernetes Diagnostic Engine
+kube-triage --help
+```
+
+## Shell Completion
+
+### Bash
+```bash
+source <(kube-triage completion bash)
+echo 'source <(kube-triage completion bash)' >> ~/.bashrc
+```
+
+### Zsh
+```bash
+source <(kube-triage completion zsh)
+echo 'source <(kube-triage completion zsh)' >> ~/.zshrc
+```
+
+### PowerShell
+```powershell
+kube-triage completion powershell | Out-String | Invoke-Expression
+kube-triage completion powershell | Out-String | Out-File (Split-Path $PROFILE) -Append
+```
+
+## Verify Cluster Access
+```bash
+kubectl get nodes
+kubectl auth can-i get pods --all-namespaces
+```
+
+> **Docker Desktop Users:** Settings > Kubernetes > Enable Kubernetes > Apply & Restart

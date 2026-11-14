@@ -1,0 +1,147 @@
+---
+title: "Architecture"
+description: "How kube-triage works under the hood"
+---
+
+# Architecture
+
+kube-triage follows a modular, layered architecture designed for extensibility and reliability.
+
+## System Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        kube-triage CLI                          │
+├─────────────────────────────────────────────────────────────────┤
+│  cmd/                    │  internal/                            │
+│  ├── main.go             │  ├── collector/   ← K8s API clients  │
+│  └── (Cobra CLI)         │  │   ├── pod.go    ← Pods, logs      │
+│                          │  │   ├── events.go ← Warning events   │
+│                          │  │   ├── workload.go← Deploy/RS/STS   │
+│                          │  │   ├── node.go   ← Node conditions  │
+│                          │  │   ├── storage.go← PVC/PV           │
+│                          │  │   └── network.go← Svc/EP/Ingress   │
+│                          │  ├── analyzer/                     │
+│                          │  │   ├── engine.go  ← Hybrid engine  │
+│                          │  │   ├── rules/     ← Deterministic   │
+│                          │  │   └── ai/        ← LLM clients    │
+│                          │  ├── renderer/                     │
+│                          │  │   ├── printer.go ← Lipgloss TUI  │
+│                          │  │   └── tables.go  ← Structured    │
+│                          │  └── fixer/        ← Remediation    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Collectors (Data Layer)
+
+Each collector is responsible for fetching specific Kubernetes resources:
+
+| Collector | Resources | Key Methods |
+|-----------|-----------|-------------|
+| PodCollector | Pods, Container Statuses, Logs | Collect(), GetContainerLogs(), GetPodEvents() |
+| EventsCollector | Events (Pod, Namespace, Related) | Collect(), GetEventsForPVC(), GetEventsForNode() |
+| WorkloadCollector | Deployments, ReplicaSets, StatefulSets, DaemonSets, Jobs, CronJobs | Collect(), GetPodsForWorkload(), GetDeploymentForPod() |
+| NodeCollector | Nodes, Conditions, Taints, Capacity | Collect(), List(), GetNodePressureConditions() |
+| StorageCollector | PVCs, PVs, StorageClasses | GetPVC(), ListPVCs(), GetPV(), GetPendingPVCs() |
+| NetworkCollector | Services, Endpoints, Ingress, NetworkPolicies | GetService(), ListServices(), GetIngress(), GetNetworkPolicy() |
+
+## Analyzer Engine (Intelligence Layer)
+
+The engine implements a hybrid approach:
+
+```
+Deterministic Rules (KT-001 to KT-015)
+    Match found?
+    YES - Return result (instant, no API call)
+    NO - Build AI Payload → AI Provider Chain
+```
+
+### Rule Matching
+
+```go
+type Matcher struct {
+    rules []Rule
+}
+
+func (m *Matcher) MatchPod(pod *corev1.Pod) []MatchResult {
+    // Matches against container states (terminated, waiting, running)
+    // Returns scored matches with context
+}
+```
+
+### AI Payload Builder
+
+When no deterministic rule matches, the engine builds a structured payload:
+
+```go
+type AIPayload struct {
+    Timestamp    string
+    Resource     ResourceInfo
+    Pod          *PodInfo
+    Workload     *WorkloadInfo
+    Events       []EventInfo
+    Node         *NodeInfo
+    Storage      *StorageInfo
+    Network      *NetworkInfo
+    MatchedRules []string
+}
+```
+
+### AI Provider Chain
+
+The engine tries providers in priority order:
+
+1. **NVIDIA Nemotron** (if NVIDIA_API_KEY set)
+2. **Ollama Local** (if OLLAMA_HOST set)
+3. **OpenAI** (if OPENAI_API_KEY set)
+4. **Anthropic** (if ANTHROPIC_API_KEY set)
+5. **Graceful Fallback** - Deterministic default
+
+## Renderer (Presentation Layer)
+
+The renderer supports multiple output formats:
+
+- **Terminal** - Lipgloss-based TUI with colors, tables, severity badges
+- **JSON** - Structured output for CI/CD pipelines
+- **YAML** - Configuration format (planned)
+
+## Fixer (Remediation Layer)
+
+The fixer executes or displays remediation commands:
+
+- **Dry-run mode** - Shows commands without executing
+- **Interactive mode** - Step-by-step wizard with confirmations
+- **Auto-approve** - Executes all commands automatically
+- **Windows support** - Fixes kubectl JSON patch commands for Windows
+
+## Data Flow
+
+```
+User: kube-triage analyze pod failing-app -n prod
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ Collector: Pod + Events + Workload + Node │
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ Deterministic Rules (KT-001 to KT-015)    │
+│   Match? - Return result (instant)        │
+│   No match? - Build AI Payload            │
+└──────────────────────────────────────────┘
+         │
+         ▼ (if no deterministic match)
+┌──────────────────────────────────────────┐
+│ AI Provider Chain (auto-detected)         │
+│   1. NVIDIA Nemotron (NVIDIA_API_KEY)     │
+│   2. Ollama Local (OLLAMA_HOST)           │
+│   3. OpenAI (OPENAI_API_KEY)              │
+│   4. Anthropic (ANTHROPIC_API_KEY)        │
+└──────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│ Render: Terminal UI / JSON / YAML         │
+└──────────────────────────────────────────┘
+```

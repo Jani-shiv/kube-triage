@@ -1,0 +1,23 @@
+---
+interface Props {
+  currentPath?: string;
+}
+
+const { currentPath = '/' } = Astro.props;
+
+const navItems = [
+  { title: 'Getting Started', items: [{ label: 'Introduction', href: '/', description: 'Overview and key concepts' }] }
+];
+---
+
+<nav class="p-4 space-y-6" aria-label="Documentation sidebar">
+  <ul class="space-y-1" role="list">
+    {navItems[0].items.map((item) => (
+      <li>
+        <a href={item.href} class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]">
+          <span class="flex-1 truncate">{item.label}</span>
+        </a>
+      </li>
+    ))}
+  </ul>
+</nav>

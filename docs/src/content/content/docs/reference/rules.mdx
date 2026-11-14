@@ -1,0 +1,197 @@
+---
+title: "Rule Reference (KT-001 to KT-015)"
+description: "Complete reference for all 15 deterministic rules"
+---
+
+# Rule Reference (KT-001 to KT-015)
+
+Complete reference for all 15 built-in deterministic failure patterns. Rules are evaluated in priority order; first match wins.
+
+## Rule Matching Logic
+
+- Rules evaluated in order (KT-001 to KT-015)
+- First match wins (highest priority)
+- Each rule can match: container state, events, resource status, node conditions
+- Templates use Go template syntax with context variables
+- Remediation commands support template substitution
+
+## Rule Summary Table
+
+| Rule ID | Name | Category | Severity | Trigger |
+|---------|------|----------|----------|---------|
+| KT-001 | OOMKilled Container Termination | Resource | CRITICAL | exitCode=137, reason=OOMKilled |
+| KT-002 | CrashLoopBackOff | Lifecycle | HIGH | waiting.reason=CrashLoopBackOff |
+| KT-003 | ImagePullBackOff / ErrImagePull | Image | HIGH | waiting.reason=ImagePullBackOff/ErrImagePull |
+| KT-004 | FailedMount Volume | Storage | HIGH | event.reason=FailedMount |
+| KT-005 | FailedScheduling | Scheduling | HIGH | event.reason=FailedScheduling |
+| KT-006 | CreateContainerConfigError | Configuration | HIGH | waiting.reason=CreateContainerConfigError |
+| KT-007 | RunContainerError | Runtime | HIGH | waiting.reason=RunContainerError |
+| KT-008 | PersistentVolumeClaim Pending | Storage | HIGH | resource.kind=PVC, status=Pending |
+| KT-009 | Node Memory/Disk/PID Pressure | Node | HIGH | nodeCondition (Memory/Disk/PID) |
+| KT-010 | RBAC Permission Denied | Security | HIGH | event.reason=Forbidden |
+| KT-011 | Liveness/Readiness Probe Failure | Probes | MEDIUM | event.reason=Liveness/ReadinessProbeFailed |
+| KT-012 | OOMKilled - Init Container | Resource | CRITICAL | initContainer exitCode=137 |
+| KT-013 | Container Exited with Code 1 | Application | MEDIUM | terminated.exitCode=1 |
+| KT-014 | Container Exited with Code 139 (Segfault) | Application | HIGH | terminated.exitCode=139 |
+| KT-015 | Container Exited with Code 143 (SIGTERM) | Lifecycle | LOW | terminated.exitCode=143 |
+
+## Detailed Rule Specifications
+
+### KT-001: OOMKilled Container Termination (CRITICAL)
+
+**Category:** Resource  
+**Trigger:** containerState.terminated.exitCode=137, reason=OOMKilled  
+**Template Variables:** {ContainerName, LimitMemory, DeploymentName, Namespace, RestartCount}
+
+**Diagnosis Template:**
+```
+Container {{ .ContainerName }} exceeded its hard memory limit of {{ .LimitMemory }}.
+Kubernetes sent SIGKILL (exit code 137) to terminate the process.
+```
+
+**Remediation:**
+1. Increase memory limit in deployment spec
+2. Add memory request for QoS guarantees
+
+**Prevention:**
+- Set memory requests = limits for Guaranteed QoS class
+- Configure Prometheus alerts: container_memory_usage_bytes > 0.8 * limit
+- Profile application with pprof to identify memory leaks
+- Implement graceful degradation under memory pressure
+
+### KT-002: CrashLoopBackOff (HIGH)
+
+**Category:** Lifecycle  
+**Trigger:** containerState.waiting.reason=CrashLoopBackOff  
+**Template Variables:** {ContainerName, RestartCount, PodName, Namespace}
+
+**Diagnosis Template:**
+```
+Container {{ .ContainerName }} is in CrashLoopBackOff with {{ .RestartCount }} restarts.
+The container fails repeatedly on startup. Check previous logs for the actual error.
+```
+
+**Remediation:**
+1. Check previous container logs for root cause
+2. Describe pod for events and configuration
+
+**Prevention:**
+- Configure proper liveness and readiness probes with appropriate initialDelaySeconds
+- Set startup probes for slow-starting applications
+- Ensure application handles SIGTERM gracefully
+- Use init containers for pre-start dependencies
+
+### KT-003: ImagePullBackOff / ErrImagePull (HIGH)
+
+**Category:** Image  
+**Trigger:** containerState.waiting.reason=ImagePullBackOff/ErrImagePull  
+**Template Variables:** {ContainerName, Image, PodName, Namespace}
+
+**Diagnosis Template:**
+```
+Kubernetes cannot pull the container image {{ .Image }}.
+Common causes: wrong image name/tag, missing credentials, registry unreachable, rate limiting.
+```
+
+**Remediation:**
+1. Verify image name and tag in pod spec
+2. Check image pull secrets
+3. Test image pull manually
+
+### KT-004: FailedMount Volume (HIGH)
+
+**Category:** Storage  
+**Trigger:** event.reason=FailedMount  
+**Template Variables:** {PodName, Namespace, PVCName, EventMessage}
+
+### KT-005: FailedScheduling (HIGH)
+
+**Category:** Scheduling  
+**Trigger:** event.reason=FailedScheduling  
+**Template Variables:** {PodName, Namespace, EventMessage}
+
+### KT-006: CreateContainerConfigError (HIGH)
+
+**Category:** Configuration  
+**Trigger:** waiting.reason=CreateContainerConfigError
+
+### KT-007: RunContainerError (HIGH)
+
+**Category:** Runtime  
+**Trigger:** waiting.reason=RunContainerError
+
+### KT-008: PersistentVolumeClaim Pending (HIGH)
+
+**Category:** Storage  
+**Trigger:** resource.kind=PersistentVolumeClaim, status=Pending
+
+### KT-009: Node Memory/Disk/PID Pressure (HIGH)
+
+**Category:** Node  
+**Trigger:** nodeCondition.type=MemoryPressure|DiskPressure|PIDPressure, status=True
+
+### KT-010: RBAC Permission Denied (HIGH)
+
+**Category:** Security  
+**Trigger:** event.reason=Forbidden
+
+### KT-011: Liveness/Readiness Probe Failure (MEDIUM)
+
+**Category:** Probes  
+**Trigger:** event.reason=LivenessProbeFailed/ReadinessProbeFailed
+
+### KT-012: OOMKilled - Init Container (CRITICAL)
+
+**Category:** Resource  
+**Trigger:** initContainer exitCode=137, reason=OOMKilled
+
+### KT-013: Container Exited with Code 1 (MEDIUM)
+
+**Category:** Application  
+**Trigger:** terminated.exitCode=1
+
+### KT-014: Container Exited with Code 139 (Segfault) (HIGH)
+
+**Category:** Application  
+**Trigger:** terminated.exitCode=139
+
+### KT-015: Container Exited with Code 143 (SIGTERM) (LOW)
+
+**Category:** Lifecycle  
+**Trigger:** terminated.exitCode=143
+
+**Diagnosis Template:**
+```
+Container {{ .ContainerName }} received SIGTERM (exit 143) and terminated gracefully.
+This is normal during pod deletion, scaling down, or node drain.
+```
+
+**Remediation:** Normal termination - no action needed unless unexpected.
+
+**Prevention:**
+- Implement graceful shutdown handling (catch SIGTERM)
+- Set appropriate terminationGracePeriodSeconds
+- Use preStop hooks for cleanup
+
+## Extending Rules
+
+Rules are defined in `configs/heuristic-rules.yaml`. To add custom rules:
+
+```yaml
+rules:
+  - id: "CUSTOM-001"
+    name: "Custom Rule Name"
+    category: "custom"
+    severity: "HIGH"
+    trigger:
+      event:
+        reason: ["CustomReason"]
+    diagnosisTemplate: |
+      Custom diagnosis for {{ .PodName }}
+    remediationSteps:
+      - type: "command"
+        description: "Custom remediation"
+        snippet: "kubectl custom-command {{ .PodName }}"
+    prevention:
+      - "Custom prevention tip"
+```

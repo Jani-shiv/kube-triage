@@ -1,0 +1,112 @@
+---
+interface Props {
+  currentPath?: string;
+}
+
+const { currentPath = '/' } = Astro.props;
+
+const navItems = [
+  {
+    title: 'Getting Started',
+    items: [
+      { label: 'Introduction', href: '/', description: 'Overview and key concepts' },
+      { label: 'Quick Start', href: '/getting-started/quick-start', description: 'Get up and running in 5 minutes' },
+      { label: 'Installation', href: '/getting-started/installation', description: 'Install via binary, package manager, or source' },
+      { label: 'Configuration', href: '/getting-started/configuration', description: 'Configure kube-triage for your environment' },
+    ]
+  },
+  {
+    title: 'Core Concepts',
+    items: [
+      { label: 'Architecture', href: '/concepts/architecture', description: 'How kube-triage works under the hood' },
+      { label: 'Collectors', href: '/concepts/collectors', description: 'Pod, Events, Workload, Node, Storage, Network' },
+      { label: 'Analyzer Engine', href: '/concepts/analyzer', description: 'Deterministic rules + AI hybrid engine' },
+      { label: 'Heuristic Rules', href: '/concepts/rules', description: 'KT-001 through KT-015 rule reference' },
+    ]
+  },
+  {
+    title: 'AI Providers',
+    items: [
+      { label: 'Overview', href: '/ai/overview', description: 'AI provider architecture and fallback chain' },
+      { label: 'NVIDIA Nemotron', href: '/ai/nvidia', description: 'Primary provider (free tier at build.nvidia.com)' },
+      { label: 'Ollama (Local)', href: '/ai/ollama', description: 'Run models locally with Ollama' },
+      { label: 'OpenAI', href: '/ai/openai', description: 'GPT-4o and compatible models' },
+      { label: 'Anthropic', href: '/ai/anthropic', description: 'Claude 3.5 Sonnet integration' },
+    ]
+  },
+  {
+    title: 'Usage Guides',
+    items: [
+      { label: 'Analyzing Pods', href: '/guides/analyzing-pods', description: 'Diagnose pod failures' },
+      { label: 'Analyzing Deployments', href: '/guides/analyzing-deployments', description: 'Debug deployment issues' },
+      { label: 'JSON Output for CI/CD', href: '/guides/json-output', description: 'Integrate with pipelines' },
+      { label: 'Auto-Approve Remediation', href: '/guides/auto-approve', description: 'Automated remediation workflows' },
+      { label: 'Shell Completion', href: '/guides/shell-completion', description: 'Tab completion for PowerShell, Bash, Zsh' },
+    ]
+  },
+  {
+    title: 'Reference',
+    items: [
+      { label: 'CLI Reference', href: '/reference/cli', description: 'Complete command reference' },
+      { label: 'Rule Reference (KT-001 to KT-015)', href: '/reference/rules', description: 'Complete rule specifications' },
+      { label: 'Configuration File', href: '/reference/config', description: '~/.kube-triage.yaml reference' },
+      { label: 'Environment Variables', href: '/reference/env-vars', description: 'All supported environment variables' },
+      { label: 'JSON Output Schema', href: '/reference/json-schema', description: 'API response format' },
+    ]
+  },
+  {
+    title: 'Development',
+    items: [
+      { label: 'Building from Source', href: '/development/building', description: 'Compile from source code' },
+      { label: 'Running Tests', href: '/development/testing', description: 'Unit and integration tests' },
+      { label: 'Contributing', href: '/development/contributing', description: 'Contribution guidelines' },
+      { label: 'Release Process', href: '/development/release', description: 'How releases are made' },
+    ]
+  },
+  {
+    title: 'Community',
+    items: [
+      { label: 'GitHub Repository', href: 'https://github.com/Jani-shiv/kube-triage', external: true },
+      { label: 'Issues & Bug Reports', href: 'https://github.com/Jani-shiv/kube-triage/issues', external: true },
+      { label: 'Discussions', href: 'https://github.com/Jani-shiv/kube-triage/discussions', external: true },
+      { label: 'Releases', href: 'https://github.com/Jani-shiv/kube-triage/releases', external: true },
+    ]
+  }
+];
+---
+
+<nav class="p-4 space-y-6" aria-label="Documentation sidebar">
+  {navItems.map((group) => (
+    <div>
+      <h3 class="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-3 px-2">
+        {group.title}
+      </h3>
+      <ul class="space-y-1" role="list">
+        {group.items.map((item) => {
+          const isActive = currentPath === item.href || (currentPath !== '/' && currentPath.startsWith(item.href + '/'));
+          const isExternal = item.external === true;
+          return (
+            <li>
+              <a
+                href={item.href}
+                class={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${isActive
+                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300 font-medium'
+                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]'} group`}
+                href={item.href}
+                target={isExternal ? '_blank' : undefined}
+                rel={isExternal ? 'noopener noreferrer' : undefined}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <span class="flex-1 truncate">{item.label}</span>
+                {isExternal && (
+                  <svg class="w-4 h-4 text-[var(--color-text-muted)] group-hover:text-[var(--color-text-primary)] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                )}
+              </a>
+            );
+          })}
+      </ul>
+    </div>
+  ))}
+</nav>

@@ -1,0 +1,149 @@
+---
+import DocLayout from '../../layouts/DocLayout.astro';
+import { getCollection } from 'astro:content';
+---
+
+<DocLayout title="Rule Reference (KT-001 to KT-015)" description="Complete reference for all 15 deterministic rules" currentPath="/reference/rules">
+  
+  <h1 class="text-4xl font-bold text-[var(--color-text-primary)] mb-8">Rule Reference (KT-001 to KT-015)</h1>
+  
+  <div class="prose prose-lg max-w-none">
+    <p class="lead text-xl text-[var(--color-text-secondary)]">
+      Complete reference for all 15 built-in deterministic failure patterns. Rules are evaluated in priority order; first match wins.
+    </p>
+
+    <div class="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg p-6 mb-12">
+      <h3 class="text-lg font-semibold text-brand-800 dark:text-brand-200 mb-4">Rule Matching Logic</h3>
+      <ul>
+        <li>Rules evaluated in order (KT-001 to KT-015)</li>
+        <li>First match wins (highest priority)</li>
+        <li>Each rule can match: container state, events, resource status, node conditions</li>
+        <li>Templates use Go template syntax with context variables</li>
+        <li>Remediation commands support template substitution</li>
+      </ul>
+    </div>
+
+    <h2 id="rule-summary">Rule Summary Table</h2>
+    
+    <div class="overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Rule ID</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Severity</th>
+            <th>Trigger</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>KT-001</code></td>
+            <td>OOMKilled Container Termination</td>
+            <td>Resource</td>
+            <td><span class="badge-critical">CRITICAL</span></td>
+            <td>exitCode=137, reason=OOMKilled</td>
+          </tr>
+          <tr>
+            <td><code>KT-002</code></td>
+            <td>CrashLoopBackOff</td>
+            <td>Lifecycle</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>waiting.reason=CrashLoopBackOff</td>
+          </tr>
+          <tr>
+            <td><code>KT-003</code></td>
+            <td>ImagePullBackOff / ErrImagePull</td>
+            <td>Image</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>waiting.reason=ImagePullBackOff/ErrImagePull</td>
+          </tr>
+          <tr>
+            <td><code>KT-004</code></td>
+            <td>FailedMount Volume</td>
+            <td>Storage</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>event.reason=FailedMount</td>
+          </tr>
+          <tr>
+            <td><code>KT-005</code></td>
+            <td>FailedScheduling</td>
+            <td>Scheduling</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>event.reason=FailedScheduling</td>
+          </tr>
+          <tr>
+            <td><code>KT-006</code></td>
+            <td>CreateContainerConfigError</td>
+            <td>Configuration</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>waiting.reason=CreateContainerConfigError</td>
+          </tr>
+          <tr>
+            <td><code>KT-007</code></td>
+            <td>RunContainerError</td>
+            <td>Runtime</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>waiting.reason=RunContainerError</td>
+          </tr>
+          <tr>
+            <td><code>KT-008</code></td>
+            <td>PersistentVolumeClaim Pending</td>
+            <td>Storage</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>resource.kind=PVC, status=Pending</td>
+          </tr>
+          <tr>
+            <td><code>KT-009</code></td>
+            <td>Node Memory/Disk/PID Pressure</td>
+            <td>Node</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>nodeCondition (Memory/Disk/PID)</td>
+          </tr>
+          <tr>
+            <td><code>KT-010</code></td>
+            <td>RBAC Permission Denied</td>
+            <td>Security</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>event.reason=Forbidden</td>
+          </tr>
+          <tr>
+            <td><code>KT-011</code></td>
+            <td>Liveness/Readiness Probe Failure</td>
+            <td>Probes</td>
+            <td><span class="badge-medium">MEDIUM</span></td>
+            <td>event.reason=Liveness/ReadinessProbeFailed</td>
+          </tr>
+          <tr>
+            <td><code>KT-012</code></td>
+            <td>OOMKilled - Init Container</td>
+            <td>Resource</td>
+            <td><span class="badge-critical">CRITICAL</span></td>
+            <td>initContainer exitCode=137</td>
+          </tr>
+          <tr>
+            <td><code>KT-013</code></td>
+            <td>Container Exited with Code 1</td>
+            <td>Application</td>
+            <td><span class="badge-medium">MEDIUM</span></td>
+            <td>terminated.exitCode=1</td>
+          </tr>
+          <tr>
+            <td><code>KT-014</code></td>
+            <td>Container Exited with Code 139 (Segfault)</td>
+            <td>Application</td>
+            <td><span class="badge-high">HIGH</span></td>
+            <td>terminated.exitCode=139</td>
+          </tr>
+          <tr>
+            <td><code>KT-015</code></td>
+            <td>Container Exited with Code 143 (SIGTERM)</td>
+            <td>Lifecycle</td>
+            <td><span class="badge-low">LOW</span></td>
+            <td>terminated.exitCode=143</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</DocLayout>

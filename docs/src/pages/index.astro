@@ -1,0 +1,16 @@
+---
+import DocLayout from '../layouts/DocLayout.astro';
+import Hero from '../components/Hero.astro';
+import Features from '../components/Features.astro';
+import QuickStart from '../components/QuickStart.astro';
+import Stats from '../components/Stats.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<DocLayout title="kube-triage — AI-Powered Kubernetes Diagnostic Engine" description="From CrashLoopBackOff to root cause in seconds. Analyze failing Kubernetes resources, pinpoint root causes instantly, and get precise, production-safe remediation commands." currentPath="/" showSidebar={false}>
+  <Hero />
+  <Stats />
+  <Features />
+  <QuickStart />
+  <Footer />
+</DocLayout>
