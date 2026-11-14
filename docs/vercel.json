@@ -4,11 +4,6 @@
   "framework": "astro",
   "installCommand": "npm install",
   "devCommand": "npm run dev",
-  "github": {
-    "enabled": true,
-    "autoAlias": true,
-    "silent": false
-  },
   "headers": [
     {
       "source": "/(.*)",
@@ -26,11 +21,6 @@
           "value": "1; mode=block"
         }
       ]
-    },
-    "rewrites": [
-      {
-        "source": "/(.*)",
-        "destination": "/index.html"
-      }
-    ]
+    }
   }
+}
