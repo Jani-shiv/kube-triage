@@ -1,26 +1,26 @@
 ---
 ---
 
-<section class="py-24 lg:py-32 bg-[var(--color-bg-secondary)] border-y border-[var(--color-border)]" aria-labelledby="quickstart-heading">
-  <div class="max-w-7xl mx-auto px-6 lg:px-12">
-    <header class="text-center max-w-3xl mx-auto mb-16">
-      <h2 id="quickstart-heading" class="text-3xl lg:text-4xl font-bold text-[var(--color-text-primary)] mb-6">
+<section class="py-28 lg:py-40 bg-[var(--color-bg-secondary)] border-y border-[var(--color-border)]" aria-labelledby="quickstart-heading">
+  <div class="container">
+    <header class="section-header mb-20">
+      <h2 id="quickstart-heading" class="section-title">
         Get Started in <span class="gradient-text">3 Steps</span>
       </h2>
-      <p class="text-xl text-[var(--color-text-secondary)]">
+      <p class="section-subtitle">
         From zero to diagnosing your first failing pod in under 5 minutes.
       </p>
     </header>
 
-    <div class="grid md:grid-cols-3 gap-8">
-      <article class="relative">
-        <div class="absolute -top-4 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-2xl font-bold text-brand-600 dark:text-brand-400">
+    <div class="grid md:grid-cols-3 gap-10 lg:gap-12">
+      <article class="relative group">
+        <div class="absolute -top-5 left-1/2 -translate-x-1/2 w-16 h-16 rounded-2xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-3xl font-bold text-brand-600 dark:text-brand-400 group-hover:scale-110 transition-transform duration-300">
           1
         </div>
-        <div class="card pt-10">
-          <h3 class="text-xl font-semibold text-[var(--color-text-primary)] mb-4">Install</h3>
-          <div class="space-y-4">
-            <div class="bg-[var(--color-bg-tertiary)] rounded-lg p-4 font-mono text-sm overflow-x-auto">
+        <div class="card card-hover pt-14">
+          <h3 class="text-xl font-semibold text-[var(--color-text-primary)] mb-5">Install</h3>
+          <div class="space-y-5">
+            <div class="bg-[var(--color-bg-tertiary)] rounded-xl p-5 font-mono text-sm overflow-x-auto">
               <pre><code># Go install (latest)
 go install github.com/Jani-shiv/kube-triage/cmd@latest
 
@@ -32,14 +32,14 @@ go install github.com/Jani-shiv/kube-triage/cmd@latest
         </div>
       </article>
 
-      <article class="relative">
-        <div class="absolute -top-4 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-kube-100 dark:bg-kube-900/30 flex items-center justify-center text-2xl font-bold text-kube-600 dark:text-kube-400">
+      <article class="relative group">
+        <div class="absolute -top-5 left-1/2 -translate-x-1/2 w-16 h-16 rounded-2xl bg-kube-100 dark:bg-kube-900/30 flex items-center justify-center text-3xl font-bold text-kube-600 dark:text-kube-400 group-hover:scale-110 transition-transform duration-300">
           2
         </div>
-        <div class="card pt-10">
-          <h3 class="text-xl font-semibold text-[var(--color-text-primary)] mb-4">Verify Cluster Access</h3>
-          <div class="space-y-4">
-            <div class="bg-[var(--color-bg-tertiary)] rounded-lg p-4 font-mono text-sm overflow-x-auto">
+        <div class="card card-hover pt-14">
+          <h3 class="text-xl font-semibold text-[var(--color-text-primary)] mb-5">Verify Cluster Access</h3>
+          <div class="space-y-5">
+            <div class="bg-[var(--color-bg-tertiary)] rounded-xl p-5 font-mono text-sm overflow-x-auto">
               <pre><code># Verify kubectl access
 kubectl get nodes
 
@@ -51,14 +51,14 @@ kubectl get nodes
         </div>
       </article>
 
-      <article class="relative">
-        <div class="absolute -top-4 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-2xl font-bold text-purple-600 dark:text-purple-400">
+      <article class="relative group">
+        <div class="absolute -top-5 left-1/2 -translate-x-1/2 w-16 h-16 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-3xl font-bold text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform duration-300">
           3
         </div>
-        <div class="card pt-10">
-          <h3 class="text-xl font-semibold text-[var(--color-text-primary)] mb-4">Diagnose</h3>
-          <div class="space-y-4">
-            <div class="bg-[var(--color-bg-tertiary)] rounded-lg p-4 font-mono text-sm overflow-x-auto">
+        <div class="card card-hover pt-14">
+          <h3 class="text-xl font-semibold text-[var(--color-text-primary)] mb-5">Diagnose</h3>
+          <div class="space-y-5">
+            <div class="bg-[var(--color-bg-tertiary)] rounded-xl p-5 font-mono text-sm overflow-x-auto">
               <pre><code># Analyze a failing pod
 kube-triage analyze pod failing-pod -n production
 
@@ -71,18 +71,18 @@ kube-triage analyze pod failing-pod -n production --dry-run
 # JSON output for CI/CD
 kube-triage analyze pod failing-pod -n production --output json</code></pre>
             </div>
-            <p class="text-[var(--color-text-secondary)] text-sm">Add <code class="bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 px-1.5 py-0.5 rounded text-xs font-mono">--auto-approve</code> to execute remediation automatically.</p>
+            <p class="text-[var(--color-text-secondary)] text-sm">Add <code class="bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 px-2 py-1 rounded text-xs font-mono">--auto-approve</code> to execute remediation automatically.</p>
           </div>
         </div>
       </article>
     </div>
 
-    <div class="mt-16 text-center">
-      <a href="/getting-started/quick-start" class="btn-primary text-lg px-8 py-3 inline-flex items-center gap-2">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <div class="mt-20 text-center">
+      <a href="/getting-started/quick-start" class="btn-primary text-lg px-10 py-4 inline-flex items-center gap-3 group">
+        <span>View Complete Quick Start Guide</span>
+        <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
-        View Complete Quick Start Guide
       </a>
     </div>
   </div>
